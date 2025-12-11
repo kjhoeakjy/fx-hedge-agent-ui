@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>FX Hedge Agent</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0e1628;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    /* 전체 래퍼: 좌측 설명 + 우측 채팅 */
+    .app-wrapper {
+    display: grid;
+    grid-template-columns: 320px 1fr;  /* 왼쪽: 설명, 오른쪽: 채팅 영역 */
+    column-gap: 32px;
+    width: 100%;
+    max-width: 1200px;
+    padding: 24px;
+    box-sizing: border-box;
+    margin: 0 auto;                    /* 전체 블록은 화면 중앙에 */
+    }
+
+    /* 좌측 설명 패널 */
+    .side-panel {
+      flex: 1;
+      min-width: 260px;
+      max-width: 360px;
+      background: rgba(15,23,42,0.9);
+      border-radius: 18px;
+      border: 1px solid rgba(148,163,184,0.35);
+      color: #e5e7eb;
+      padding: 18px 18px 16px;
+      box-sizing: border-box;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .side-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #e0e7ff;
+    }
+
+    .side-subtitle {
+      font-size: 13px;
+      color: #9ca3af;
+      margin-bottom: 14px;
+    }
+
+    .side-section {
+      margin-bottom: 16px;
+    }
+
+    .side-section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #bfdbfe;
+    }
+
+    .side-list {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+      font-size: 12px;
+      color: #d1d5db;
+    }
+
+    .side-list li {
+      margin-bottom: 4px;
+      line-height: 1.45;
+    }
+
+    .side-code {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      background: rgba(15,23,42,0.9);
+      border-radius: 999px;
+      padding: 3px 8px;
+      border: 1px solid rgba(148,163,184,0.6);
+      display: inline-block;
+      margin-top: 3px;
+    }
+
+    .side-note {
+      font-size: 11px;
+      color: #9ca3af;
+      line-height: 1.5;
+    }
+
+    /* 우측 채팅 컨테이너 */
+    .chat-container {
+      width: 720px;
+      height: 840px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 22px;
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 0 30px rgba(0,0,0,0.35);
+      animation: fadeIn 0.4s ease-out;
+      justify-self: center;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .chat-header {
+      padding: 14px 18px;
+      background: linear-gradient(135deg, #1a2337, #0f172a);
+      color: #e0eaff;
+      font-size: 17px;
+      font-weight: 600;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+      position: relative;
+    }
+
+    .chat-header::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+    }
+
+    .chat-body {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      color: #e5e7eb;
+    }
+
+    .msg-row {
+      margin: 10px 0;
+      display: flex;
+      opacity: 0;
+      animation: msgFade 0.25s forwards;
+    }
+
+    @keyframes msgFade {
+      from { opacity: 0; transform: translateY(5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg-row.user { justify-content: flex-end; }
+    .msg-row.bot  { justify-content: flex-start; }
+
+    .bubble {
+      max-width: 78%;
+      padding: 10px 13px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .bubble.user {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .bubble.bot {
+      background: rgba(255,255,255,0.12);
+      color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-bottom-left-radius: 4px;
+      backdrop-filter: blur(4px);
+    }
+
+    .typing {
+      padding-left: 6px;
+      font-size: 16px;
+      letter-spacing: 3px;
+      color: #9ca3af;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0% { opacity: 0.2; }
+      50% { opacity: 1; }
+      100% { opacity: 0.2; }
+    }
+
+    .chat-footer {
+      padding: 12px;
+      background: #111827;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      gap: 8px;
+    }
+
+    .chat-footer input {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: #e5e7eb;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .chat-footer button {
+      padding: 10px 16px;
+      background: #3b82f6;
+      border: none;
+      border-radius: 18px;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: 0.15s;
+    }
+
+    .chat-footer button:hover {
+      background: #2563eb;
+    }
+
+    .chat-footer button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    /* 반응형: 좁은 화면에서는 상하 배치 */
+    @media (max-width: 900px) {
+      body {
+        align-items: flex-start;
+      }
+      .app-wrapper {
+        flex-direction: column;
+        align-items: center;
+      }
+      .side-panel, .chat-container {
+        width: 100%;
+        max-width: 460px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="app-wrapper">
+
+  <!-- 좌측 사용 설명 패널 -->
+  <div class="side-panel">
+    <div class="side-title">FX Hedge Agent 안내</div>
+    <div class="side-subtitle">
+      환율·환헤지 관련 질의를 Supervisor Agent가 통합 분석해 응답합니다.
+    </div>
+
+    <div class="side-section">
+      <div class="side-section-title">1) 가능한 질문 예시</div>
+      <ul class="side-list">
+        <li>• 환헤지 전략 요청<br>
+            &nbsp;&nbsp;예) "내 환헤지 전략 알려줘"<br>
+            &nbsp;&nbsp;예) "헤지 비율 추천해줘"</li>
+        <li>• 시장 동향 / 거시 분석<br>
+            &nbsp;&nbsp;예) "최근 30일 USD/KRW 흐름 설명해줘"</li>
+        <li>• 뉴스 기반 설명<br>
+            &nbsp;&nbsp;예) "환율 관련 최신 뉴스 요약해줘"</li>
+        <li>• 개념 / 정의 요청<br>
+            &nbsp;&nbsp;예) "FX Hedge가 뭐야?"<br>
+            &nbsp;&nbsp;예) "Hedge ratio 계산 방법 설명해줘"</li>
+      </ul>
+    </div>
+
+    <div class="side-section">
+      <div class="side-section-title">2) 작동 원칙</div>
+      <ul class="side-list">
+        <li>• 사용자가 전략을 요구할 때만<br>
+            &nbsp;&nbsp;hedge ratio, forward/NDF/option 제안을 제공합니다.</li>
+        <li>• 전략 요청이 아니면<br>
+            &nbsp;&nbsp;뉴스 요약, 동향 설명, 개념 정리만 제공합니다.</li>
+        <li>• Collector / Web Search / RAG 결과는<br>
+            &nbsp;&nbsp;상황에 따라 일부만 사용될 수 있습니다.</li>
+      </ul>
+    </div>
+
+    <div class="side-section">
+      <div class="side-section-title">3) user_id 및 리셋</div>
+      <ul class="side-list">
+        <li>• 대화 시작 시<br>
+            &nbsp;&nbsp;먼저 <b>user_id</b>를 입력해야 합니다.</li>
+        <li>• user_id 변경 또는 초기화<br>
+          <span class="side-code">/reset</span> 을 입력합니다.
+        </li>
+      </ul>
+    </div>
+
+    <div class="side-section">
+      <div class="side-section-title">4) 응답 시간</div>
+      <p class="side-note">
+        Collector / Web Search / RAG / Strategy Agent를 모두 사용할 경우<br>
+        최대 수 분이 소요될 수 있습니다.<br>
+        채팅창에 "..." 말풍선이 표시되면 처리 중입니다.
+      </p>
+    </div>
+  </div>
+
+  <!-- 우측 채팅 UI -->
+  <div class="chat-container">
+    <div class="chat-header">FX Hedge Agent</div>
+    <div id="chat" class="chat-body"></div>
+
+    <div class="chat-footer">
+      <input id="input" placeholder="메시지를 입력하세요" />
+      <button id="sendBtn" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const webhookUrl = "https://kjhoeakjy.app.n8n.cloud/webhook/fx-hedge-agent";
+let currentUserId = null;
+let phase = "askUserId";
+
+const chatEl = document.getElementById("chat");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+
+function addMessage(sender, text) {
+  const row = document.createElement("div");
+  row.className = "msg-row " + sender;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble " + sender;
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  chatEl.appendChild(row);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function addTypingIndicator() {
+  const row = document.createElement("div");
+  row.className = "msg-row bot";
+  row.id = "typing-row";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble bot typing";
+  bubble.textContent = "...";
+  row.appendChild(bubble);
+  chatEl.appendChild(row);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById("typing-row");
+  if (el) el.remove();
+}
+
+addMessage("bot", "안녕하세요. FX Hedge Agent입니다.\n먼저 user_id를 입력해 주세요.");
+
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  addMessage("user", text);
+  inputEl.value = "";
+  inputEl.focus();
+
+  if (phase === "askUserId") {
+    const id = parseInt(text, 10);
+    if (!id || id <= 0) {
+      addMessage("bot", "user_id는 양의 정수로 입력해주세요.");
+      return;
+    }
+    currentUserId = id;
+    phase = "askMessage";
+    addMessage(
+      "bot",
+      `user_id ${currentUserId}로 설정되었습니다.\n질문을 입력해 주세요. (예: 환헤지 전략 알려줘)\n질문에 따라 시간이 최대 5분 소요됩니다.`
+    );
+    return;
+  }
+
+  if (text === "/reset") {
+    currentUserId = null;
+    phase = "askUserId";
+    addMessage("bot", "user_id가 초기화되었습니다.\n다시 user_id를 입력해주세요.");
+    return;
+  }
+
+  sendBtn.disabled = true;
+  addTypingIndicator();
+
+  try {
+    const resp = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: currentUserId, message: text })
+    });
+
+    removeTyping();
+    if (!resp.ok) {
+      const err = await resp.text();
+      addMessage("bot", "서버 오류:\n" + err);
+    } else {
+      const data = await resp.json();
+      const msg = data.reply || data.answer || "응답이 비어 있습니다.";
+      addMessage("bot", msg);
+    }
+  } catch (e) {
+    removeTyping();
+    console.error("fetch error detail:", e);
+    addMessage("bot", "요청 오류: " + e.message);
+  } finally {
+    sendBtn.disabled = false;
+  }
+
+  if (phase === "askMessage") phase = "chat";
+}
+
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+</script>
+
+</body>
+</html>
